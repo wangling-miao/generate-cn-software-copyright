@@ -1,0 +1,4 @@
+interface:
+  display_name: "中国软件著作权材料生成器"
+  short_description: "从代码仓库生成、编译并校验标准软著程序与文档鉴别材料"
+  default_prompt: "Use $generate-cn-software-copyright to analyze this repository and produce validated Chinese software copyright identification materials."
