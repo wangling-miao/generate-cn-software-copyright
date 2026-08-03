@@ -1,0 +1,171 @@
+                    f"{latex_escape(item.get('method', ''))} & \\texttt{{{latex_escape(item.get('path', ''))}}} & "
+                    f"{latex_paragraph(item.get('purpose', ''))} \\\\")
+            sections.append("\\bottomrule")
+            sections.append("\\end{longtable}")
+        sections.append(
+            f"接口通过{field_text(integration, 'authentication')}进行身份校验，并通过"
+            f"{field_text(integration, 'protection')}保障调用安全。"
+        )
+
+    security = doc.get("security") or {}
+    if security:
+        sections.append("\\section{安全与异常处理}")
+        sections.append("\\begin{itemize}")
+        labels = [
+            ("authentication", "身份认证"),
+            ("authorization", "权限控制"),
+            ("data_security", "数据安全"),
+            ("input_security", "输入安全"),
+            ("audit", "日志审计"),
+            ("exception", "异常处理"),
+        ]
+        for key, label in labels:
+            if security.get(key):
+                sections.append(f"  \\item {label}：{field_text(security, key)}。")
+        sections.append("\\end{itemize}")
+
+    features = doc.get("features", [])
+    if features:
+        sections.append("\\section{软件特点总结}")
+        sections.append("\\begin{enumerate}")
+        for feature in features:
+            sections.append(f"  \\item {latex_paragraph(feature)}；")
+        sections.append("\\end{enumerate}")
+
+    save_json(audit_dir / "image-manifest.json", image_records)
+    return "\n\n".join(x for x in sections if x is not None and str(x).strip())
+
+
+def render_document_tex(
+    skill_root: Path,
+    cfg: dict[str, Any],
+    project: Path,
+    config_dir: Path,
+    submission_dir: Path,
+    audit_dir: Path,
+) -> Path:
+    template = (skill_root / "assets/templates/document-identification.tex.tpl").read_text(encoding="utf-8")
+    sw = cfg["software"]
+    replacements = {
+        "@@SOFTWARE_NAME@@": latex_escape(sw.get("full_name", "")),
+        "@@SOFTWARE_SHORT_NAME@@": latex_escape(sw.get("short_name", "")),
+        "@@SOFTWARE_VERSION@@": latex_escape(sw.get("version", "")),
+        "@@COPYRIGHT_OWNER@@": latex_escape(sw.get("copyright_owner", "")),
+        "@@DOCUMENT_DATE@@": latex_escape(sw.get("document_date") or sw.get("completion_date", "")),
+        "@@PUBLICATION_STATUS@@": latex_escape(sw.get("publication_status", "未发表")),
+        "@@SOFTWARE_TYPE@@": latex_escape(sw.get("software_type", "")),
+        "@@RUNTIME_PLATFORM@@": latex_escape(sw.get("runtime_platform", "")),
+        "@@MAIN_TECHNOLOGY@@": latex_escape(sw.get("main_technology", "")),
+        "@@ACCESS_METHOD@@": latex_escape(sw.get("access_method", "")),
+        "@@TARGET_USERS@@": latex_escape(sw.get("target_users", "")),
+        "@@DOCUMENT_BODY@@": render_document_body(cfg, project, config_dir, submission_dir, audit_dir),
+    }
+    text = template
+    for key, value in replacements.items():
+        text = text.replace(key, value)
+    out = submission_dir / "文档鉴别材料.tex"
+    out.write_text(text, encoding="utf-8")
+    return out
+
+
+def compile_tex(tex_path: Path, audit_dir: Path) -> dict[str, Any]:
+    record: dict[str, Any] = {"tex": tex_path.name, "attempted": True}
+    if not command_exists("xelatex"):
+        record.update({"success": False, "reason": "xelatex-not-found"})
+        return record
+    outputs: list[str] = []
+    rc = 0
+    for _ in range(2):
+        proc = run_command(
+            ["xelatex", "-interaction=nonstopmode", "-halt-on-error", tex_path.name],
+            cwd=tex_path.parent,
+            timeout=240,
+        )
+        rc = proc.returncode
+        outputs.append(proc.stdout)
+        if rc != 0:
+            break
+    log_path = audit_dir / f"{tex_path.stem}-xelatex.log"
+    log_path.write_text("\n\n===== PASS =====\n".join(outputs), encoding="utf-8")
+    pdf_path = tex_path.with_suffix(".pdf")
+    record.update(
+        {
+            "success": rc == 0 and pdf_path.exists(),
+            "returncode": rc,
+            "pdf": pdf_path.name if pdf_path.exists() else None,
+            "log": str(log_path.relative_to(audit_dir.parent)),
+        }
+    )
+    return record
+
+
+def cleanup_submission(submission_dir: Path) -> None:
+    for pattern in ("*.aux", "*.log", "*.out", "*.toc", "*.lof", "*.lot"):
+        for path in submission_dir.glob(pattern):
+            path.unlink(missing_ok=True)
+
+
+def main() -> int:
+    args = parse_args()
+    skill_root = Path(__file__).resolve().parents[1]
+    project = args.project.resolve()
+    config_path = args.config.resolve()
+    if not project.is_dir():
+        print(f"ERROR: 项目目录不存在：{project}", file=sys.stderr)
+        return 2
+    if not config_path.is_file():
+        print(f"ERROR: 配置文件不存在：{config_path}", file=sys.stderr)
+        return 2
+    cfg = load_config(config_path)
+    output_value = args.output or Path(get_nested(cfg, "output.directory", "copyright-materials"))
+    output_root = output_value if output_value.is_absolute() else project / output_value
+    output_root = output_root.resolve()
+    if output_root == project or project in output_root.parents and output_root.name in {"src", "app"}:
+        print("ERROR: 输出目录不能覆盖项目源码目录。", file=sys.stderr)
+        return 2
+
+    submission_dir = output_root / "submission"
+    audit_dir = output_root / "audit"
+    if output_root.exists():
+        shutil.rmtree(output_root)
+    submission_dir.mkdir(parents=True)
+    audit_dir.mkdir(parents=True)
+    shutil.copy2(config_path, audit_dir / f"input-config{config_path.suffix.lower()}")
+
+    manifest = collect_source(project, cfg, audit_dir, submission_dir)
+    selected_lines = int(manifest["selected_source"]["line_count"])
+    render_program_tex(skill_root, cfg, submission_dir, selected_lines)
+    render_document_tex(skill_root, cfg, project, config_path.parent, submission_dir, audit_dir)
+
+    build_record = {
+        "mode": args.mode,
+        "project": str(project),
+        "config": str(config_path),
+        "output": str(output_root),
+        "compile_requested": args.compile,
+        "compilations": [],
+    }
+    if args.compile:
+        for tex in (submission_dir / "程序鉴别材料.tex", submission_dir / "文档鉴别材料.tex"):
+            build_record["compilations"].append(compile_tex(tex, audit_dir))
+    save_json(audit_dir / "build-record.json", build_record)
+    cleanup_submission(submission_dir)
+
+    print(f"材料已生成：{output_root}")
+    print(f"- 提交材料：{submission_dir}")
+    print(f"- 审计与校验：{audit_dir}")
+
+    if args.validate:
+        validator = skill_root / "scripts/validate_materials.py"
+        cmd = [
+            sys.executable,
+            str(validator),
+            "--project",
+            str(project),
+            "--config",
+            str(config_path),
+            "--output",
+            str(output_root),
+            "--mode",
+            args.mode,
+        ]
