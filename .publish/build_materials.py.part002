@@ -1,0 +1,142 @@
+    except Exception:
+        pass
+    record["converted"] = False
+    return record
+
+
+def resolve_screenshot(project: Path, config_dir: Path, value: str) -> Path:
+    raw = Path(value)
+    if raw.is_absolute():
+        return raw
+    candidates = [project / raw, config_dir / raw]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
+
+
+def render_document_body(
+    cfg: dict[str, Any], project: Path, config_dir: Path, submission_dir: Path, audit_dir: Path
+) -> str:
+    doc = cfg.get("document", {})
+    project_cfg = cfg.get("project", {})
+    sections: list[str] = []
+
+    sections.append("\\section{软件概述}")
+    sections.append(
+        f"{latex_paragraph(doc.get('overview'))}。本软件主要面向{latex_escape(cfg['software'].get('target_users', ''))}，"
+        f"用于解决{latex_paragraph(doc.get('problem'))}。"
+    )
+    sections.append(
+        f"软件总体由{latex_paragraph(doc.get('components'))}构成。典型使用流程为{latex_paragraph(doc.get('typical_workflow'))}，"
+        f"最终实现{latex_paragraph(doc.get('business_result'))}。"
+    )
+
+    sections.append("\\section{运行环境与启动}")
+    sections.append("\\subsection{运行环境}")
+    sections.append("\\begin{itemize}")
+    sections.append(f"  \\item 硬件环境：{latex_paragraph(project_cfg.get('hardware_environment'))}。")
+    sections.append(f"  \\item 软件环境：{latex_paragraph(project_cfg.get('software_environment'))}。")
+    sections.append(f"  \\item 网络环境：{latex_paragraph(project_cfg.get('network_environment'))}。")
+    sections.append("\\end{itemize}")
+    sections.append("\\subsection{安装、启动与访问}")
+    sections.append(latex_paragraph(project_cfg.get("installation")))
+    startup = latex_escape(project_cfg.get("startup", ""))
+    if startup:
+        sections.append(f"软件启动命令或启动方式如下：\\begin{{quote}}\\texttt{{{startup}}}\\end{{quote}}")
+    sections.append(
+        f"启动完成后，用户通过{latex_paragraph(cfg['software'].get('access_method'))}进入软件并开始使用。"
+    )
+
+    image_records: list[dict[str, Any]] = []
+    image_dir = submission_dir / "images"
+    grayscale = bool(get_nested(cfg, "output.grayscale_screenshots", True))
+
+    interface = doc.get("main_interface") or {}
+    if interface:
+        interface = dict(interface)
+        interface["name"] = interface.get("name", "主界面与导航")
+        interface["caption"] = interface.get("caption", "软件主界面")
+        interface["purpose"] = interface.get("purpose", "集中展示软件的核心信息和主要功能入口")
+        interface["operations"] = interface.get("operations", "通过导航菜单进入各业务模块")
+        interface["processing"] = interface.get("processing", "根据用户身份、权限和业务状态展示相应内容")
+        modules = [interface] + list(doc.get("modules", []))
+    else:
+        modules = list(doc.get("modules", []))
+
+    if modules:
+        sections.append("\\section{主要界面与功能说明}")
+    for idx, raw_module in enumerate(modules, start=1):
+        module = dict(raw_module)
+        module["_index"] = idx
+        copied: str | None = None
+        value = str(module.get("screenshot", "")).strip()
+        if value:
+            src = resolve_screenshot(project, config_dir, value)
+            ext = src.suffix.lower() if src.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"} else ".png"
+            dest_name = f"{idx:02d}-screenshot.png" if grayscale else f"{idx:02d}-screenshot{ext}"
+            dest = image_dir / dest_name
+            if src.exists() and src.is_file():
+                rec = copy_screenshot(src, dest, grayscale)
+                rec["module"] = module.get("name", f"模块{idx}")
+                image_records.append(rec)
+                copied = f"images/{dest.name}"
+            else:
+                image_records.append(
+                    {"module": module.get("name", f"模块{idx}"), "source": str(src), "missing": True}
+                )
+        else:
+            image_records.append(
+                {"module": module.get("name", f"模块{idx}"), "source": "", "missing": True}
+            )
+        sections.append(screenshot_block(module, copied))
+
+    data = doc.get("data_flow") or {}
+    if data:
+        sections.append("\\section{数据输入、处理与输出}")
+        sections.append("\\subsection{数据输入}")
+        sections.append(
+            f"软件可接收{field_text(data, 'input')}。输入数据进入系统后，会经过{field_text(data, 'validation')}。"
+        )
+        steps = data.get("processing_steps", [])
+        sections.append("\\subsection{数据处理}")
+        sections.append(f"系统根据{field_text(data, 'processing_rule')}处理数据，主要步骤包括：")
+        sections.append("\\begin{enumerate}")
+        for step in steps:
+            sections.append(f"  \\item {latex_paragraph(step)}；")
+        sections.append("\\end{enumerate}")
+        sections.append("\\subsection{数据输出}")
+        sections.append(
+            f"处理结果通过{field_text(data, 'output_method')}输出，输出内容包括{field_text(data, 'output_content')}。"
+        )
+
+    permission = doc.get("permission") or {}
+    if permission and permission.get("enabled", True):
+        sections.append("\\section{用户、角色与权限}")
+        sections.append(
+            f"软件面向{field_text(permission, 'subjects')}设置用户、角色和权限。管理员可以{field_text(permission, 'management')}。"
+            f"系统依据{field_text(permission, 'model')}限制不同用户可访问的数据范围和操作能力。"
+        )
+
+    maintenance = doc.get("maintenance") or {}
+    if maintenance and maintenance.get("enabled", True):
+        sections.append("\\section{系统配置与维护}")
+        sections.append(
+            f"系统支持{field_text(maintenance, 'configuration')}。配置保存后，{field_text(maintenance, 'effect')}。"
+        )
+        sections.append(
+            f"日常维护工作包括{field_text(maintenance, 'operations')}，重要数据通过{field_text(maintenance, 'backup')}进行保护。"
+        )
+
+    integration = doc.get("integration") or {}
+    if integration and integration.get("enabled", False):
+        sections.append("\\section{接口与系统集成}")
+        sections.append(latex_paragraph(integration.get("description")))
+        interfaces = integration.get("interfaces", [])
+        if interfaces:
+            sections.append("\\begin{longtable}{p{2.7cm}p{5.3cm}p{7.0cm}}")
+            sections.append("\\toprule")
+            sections.append("方法或类型 & 路径或名称 & 功能 \\\\")
+            sections.append("\\midrule")
+            for item in interfaces:
+                sections.append(
