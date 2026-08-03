@@ -1,0 +1,30 @@
+name: Assemble release files
+
+on:
+  push:
+    paths:
+      - '.publish/READY'
+
+permissions:
+  contents: write
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Assemble scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .publish/build_materials.py.part* > scripts/build_materials.py
+          cat .publish/validate_materials.py.part* > scripts/validate_materials.py
+          python -m py_compile scripts/*.py
+          rm -rf .publish
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: publish material generator and validator"
+          git push
