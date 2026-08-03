@@ -1,0 +1,131 @@
+{
+  "software": {
+    "full_name": "云枢示例任务管理系统",
+    "short_name": "云枢任务",
+    "version": "V1.0",
+    "copyright_owner": "湘潭云枢科技有限责任公司",
+    "completion_date": "2026年8月3日",
+    "document_date": "2026年8月3日",
+    "publication_status": "未发表",
+    "software_type": "Web任务管理平台软件",
+    "runtime_platform": "Linux服务器及现代桌面浏览器",
+    "main_technology": "Go、TypeScript、Vue、PostgreSQL、Redis",
+    "access_method": "浏览器访问部署地址并登录",
+    "target_users": "需要进行团队任务协同的组织管理员和普通成员"
+  },
+  "project": {
+    "hardware_environment": "服务端2核CPU、4GB内存和20GB可用磁盘空间；客户端为可运行现代浏览器的计算机",
+    "software_environment": "Linux、Docker、PostgreSQL 16、Redis 7及Chrome或Edge浏览器",
+    "network_environment": "服务端与客户端网络可达，生产环境通过HTTPS提供访问",
+    "installation": "准备配置文件后使用Docker Compose启动数据库、缓存、后端和前端服务",
+    "startup": "docker compose up -d"
+  },
+  "source": {
+    "extensions": [".go", ".ts", ".tsx", ".vue", ".sql"],
+    "include_globs": [],
+    "exclude_globs": ["**/docs/**", "**/examples/**"],
+    "priority_globs": ["cmd/**", "internal/**", "web/src/**"],
+    "exclude_tests": true,
+    "exclude_generated": true,
+    "lines_per_page": 50,
+    "max_pages": 60,
+    "max_file_bytes": 2000000
+  },
+  "document": {
+    "overview": "一套面向团队协作场景的任务创建、分配、跟踪和统计软件",
+    "problem": "任务信息分散、责任人不明确、进度难以追踪和历史操作缺少记录的问题",
+    "components": "浏览器前端、业务服务端、数据库、缓存和审计日志模块",
+    "typical_workflow": "管理员创建组织和成员，用户建立任务并指定负责人，负责人更新进度，管理者查看统计结果",
+    "business_result": "任务从创建到完成的全过程可追踪、可查询和可审计",
+    "main_interface": {
+      "name": "工作台与导航",
+      "caption": "系统工作台主界面",
+      "screenshot": "screenshots/01-dashboard.png",
+      "purpose": "集中展示待办任务、进度统计和常用入口",
+      "operations": "查看个人待办、筛选任务并进入任务详情",
+      "processing": "根据当前登录用户的组织、角色和任务状态返回对应数据"
+    },
+    "modules": [
+      {
+        "name": "任务管理",
+        "caption": "任务列表与筛选界面",
+        "screenshot": "screenshots/02-tasks.png",
+        "purpose": "管理任务的创建、查询、修改和状态流转",
+        "operations": "新增任务、指定负责人、设置截止时间、筛选状态和更新进度",
+        "processing": "校验用户权限和必填字段，保存变更并记录操作日志"
+      },
+      {
+        "name": "成员与权限管理",
+        "caption": "成员和角色管理界面",
+        "screenshot": "screenshots/03-members.png",
+        "purpose": "维护组织成员、角色和功能权限",
+        "operations": "邀请成员、分配角色、启用或禁用账号",
+        "processing": "依据角色权限模型限制数据访问和管理操作"
+      },
+      {
+        "name": "统计分析",
+        "caption": "任务统计分析界面",
+        "screenshot": "screenshots/04-statistics.png",
+        "purpose": "统计不同时间范围内的任务数量、完成率和逾期情况",
+        "operations": "选择统计范围、查看图表并导出结果",
+        "processing": "聚合任务数据并生成可视化统计结果"
+      }
+    ],
+    "data_flow": {
+      "input": "用户输入的任务标题、描述、负责人、截止时间、状态和筛选条件",
+      "validation": "字段完整性校验、数据类型校验、身份认证和权限校验",
+      "processing_rule": "组织隔离规则、角色权限规则和任务状态流转规则",
+      "processing_steps": [
+        "接收并解析用户请求",
+        "验证登录状态、组织归属和操作权限",
+        "校验业务字段并执行新增、修改、查询或统计逻辑",
+        "保存数据、记录审计日志并返回处理结果"
+      ],
+      "output_method": "页面列表、详情卡片、统计图表和文件导出",
+      "output_content": "任务数据、处理状态、统计指标和错误提示"
+    },
+    "permission": {
+      "enabled": true,
+      "subjects": "组织管理员、项目负责人和普通成员",
+      "management": "新增成员、分配角色、调整权限和停用账号",
+      "model": "组织隔离、角色权限和资源归属规则"
+    },
+    "maintenance": {
+      "enabled": true,
+      "configuration": "组织参数、任务状态、通知策略和接口地址的配置",
+      "effect": "新配置在保存并通过校验后生效",
+      "operations": "日志查看、数据库备份、服务健康检查和版本升级",
+      "backup": "定时数据库备份和恢复演练"
+    },
+    "integration": {
+      "enabled": true,
+      "description": "系统通过REST API向前端和经过授权的外部系统提供任务数据与管理能力。",
+      "interfaces": [
+        {"method": "GET", "path": "/api/v1/tasks", "purpose": "查询当前用户可访问的任务列表"},
+        {"method": "POST", "path": "/api/v1/tasks", "purpose": "创建新任务"},
+        {"method": "PATCH", "path": "/api/v1/tasks/{id}", "purpose": "更新指定任务的信息或状态"}
+      ],
+      "authentication": "登录会话或访问令牌",
+      "protection": "权限校验、参数校验、调用频率限制和审计记录"
+    },
+    "security": {
+      "authentication": "账号密码登录并维护有时效的会话",
+      "authorization": "按组织、角色和资源归属执行访问控制",
+      "data_security": "传输使用HTTPS，敏感凭据采用不可逆散列或加密保存",
+      "input_security": "对输入参数进行类型、长度和格式校验，并使用参数化数据库查询",
+      "audit": "记录登录、任务变更、权限调整和异常事件",
+      "exception": "统一捕获业务异常和系统异常，向用户返回明确但不泄露内部细节的提示"
+    },
+    "features": [
+      "覆盖任务创建、分配、执行、完成和统计的完整流程",
+      "使用组织与角色权限模型隔离不同用户的数据和操作",
+      "关键操作具有审计记录，便于追踪任务和权限变化",
+      "支持容器化部署，便于安装、升级和迁移",
+      "前后端接口清晰，便于后续扩展通知、审批和第三方集成功能"
+    ]
+  },
+  "output": {
+    "directory": "copyright-materials",
+    "grayscale_screenshots": true
+  }
+}
