@@ -101,6 +101,19 @@ def check_output_safety(cmd: list[str], project: Path) -> None:
     print("Output safety checks passed.")
 
 
+def print_pdf_failure_diagnostics(audit: Path) -> None:
+    # This end-to-end test only builds the synthetic demo, never a user project.
+    # Print the traces before the TemporaryDirectory is cleaned up.
+    files = sorted(audit.glob("*-xelatex.log"))
+    files.extend(audit / name for name in ("build-record.json", "validation-report.md"))
+    for path in files:
+        if not path.is_file():
+            continue
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        print(f"--- {path.name} (last 80 lines) ---", file=sys.stderr)
+        print("\n".join(lines[-80:]), file=sys.stderr)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-safety-only", action="store_true", help="skip full PDF compilation")
@@ -135,6 +148,7 @@ def main() -> int:
         print(proc.stdout)
         if proc.returncode != 0:
             print("Smoke test failed.", file=sys.stderr)
+            print_pdf_failure_diagnostics(project / "full-smoke/audit")
             return proc.returncode
         report = json.loads((project / "full-smoke/audit/validation-report.json").read_text(encoding="utf-8"))
         if report["summary"]["error"] != 0:
