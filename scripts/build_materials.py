@@ -61,7 +61,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project", required=True, type=Path, help="项目仓库根目录")
     parser.add_argument("--config", required=True, type=Path, help="JSON/YAML 配置文件")
-    parser.add_argument("--output", type=Path, help="输出根目录；默认读取配置 output.directory")
+    parser.add_argument("--output", type=Path, help="尚不存在的输出根目录；默认读取配置 output.directory")
     parser.add_argument("--mode", choices=("draft", "final"), default="final")
     parser.add_argument("--compile", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--validate", action=argparse.BooleanOptionalAction, default=True)
@@ -612,20 +612,30 @@ def main() -> int:
     cfg = load_config(config_path)
     output_value = args.output or Path(get_nested(cfg, "output.directory", "copyright-materials"))
     output_root = output_value if output_value.is_absolute() else project / output_value
-    output_root = output_root.resolve()
+    # Resolve the parent but never follow the final output entry: even a
+    # dangling symlink occupies the chosen destination.
+    output_root = output_root.parent.resolve() / output_root.name
     if output_root == project or project in output_root.parents and output_root.name in {"src", "app"}:
         print("ERROR: 输出目录不能覆盖项目源码目录。", file=sys.stderr)
         return 2
 
+    try:
+        # mkdir without exist_ok atomically claims the final directory.
+        # Never delete or write into a pre-existing output, even on reruns.
+        output_root.mkdir(mode=0o700, parents=True)
+    except FileExistsError:
+        print(f"ERROR: 输出路径已存在：{output_root}。请用 --output 指定一个不存在的新目录。", file=sys.stderr)
+        return 2
+    except OSError as exc:
+        print(f"ERROR: 无法创建输出目录：{output_root}（{exc}）", file=sys.stderr)
+        return 2
+
     submission_dir = output_root / "submission"
     audit_dir = output_root / "audit"
-    if output_root.exists():
-        shutil.rmtree(output_root)
-    submission_dir.mkdir(parents=True)
-    audit_dir.mkdir(parents=True)
-    shutil.copy2(config_path, audit_dir / f"input-config{config_path.suffix.lower()}")
-
+    submission_dir.mkdir()
+    audit_dir.mkdir()
     manifest = collect_source(project, cfg, audit_dir, submission_dir)
+    shutil.copy2(config_path, audit_dir / f"input-config{config_path.suffix.lower()}")
     selected_lines = int(manifest["selected_source"]["line_count"])
     render_program_tex(skill_root, cfg, submission_dir, selected_lines)
     render_document_tex(skill_root, cfg, project, config_path.parent, submission_dir, audit_dir)
@@ -644,10 +654,8 @@ def main() -> int:
     save_json(audit_dir / "build-record.json", build_record)
     cleanup_submission(submission_dir)
 
-    print(f"材料已生成：{output_root}")
-    print(f"- 提交材料：{submission_dir}")
-    print(f"- 审计与校验：{audit_dir}")
-
+    compile_failed = any(not item["success"] for item in build_record["compilations"])
+    validation_status = 0
     if args.validate:
         validator = skill_root / "scripts/validate_materials.py"
         cmd = [
@@ -666,7 +674,18 @@ def main() -> int:
             cmd.append("--strict")
         proc = run_command(cmd, timeout=300)
         print(proc.stdout, end="")
-        return proc.returncode
+        validation_status = proc.returncode
+    if compile_failed:
+        print(f"ERROR: 请求的 LaTeX 编译失败；诊断材料保留在 {audit_dir}。", file=sys.stderr)
+    if validation_status:
+        print(f"ERROR: 材料未通过校验；诊断材料保留在 {audit_dir}。", file=sys.stderr)
+        return validation_status
+    if compile_failed:
+        return 1
+
+    print(f"材料已生成：{output_root}")
+    print(f"- 提交材料：{submission_dir}")
+    print(f"- 审计与校验：{audit_dir}")
     return 0
 
 

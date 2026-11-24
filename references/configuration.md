@@ -35,5 +35,5 @@
 
 ## output
 
-- `directory`：相对于项目根目录的输出路径。
+- `directory`：相对于项目根目录的输出路径，也可用绝对路径。必须是未创建的新路径；使用 `--output` 可为重建指定另一目录。
 - `grayscale_screenshots`：默认 `true`，将截图复制为灰度 PNG，便于黑白材料输出。

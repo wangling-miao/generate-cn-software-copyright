@@ -55,6 +55,8 @@ python scripts/build_materials.py \
   --validate
 ```
 
+Choose a dedicated output path that does not exist yet. The default is `copyright-materials/`; for another run, specify a fresh path with `--output`, such as `--output copyright-materials-v2`. Do not remove an occupied directory to retry. A failed run may leave partial files in its new output directory for troubleshooting.
+
 Use `--mode draft` only when required legal data or screenshots are intentionally incomplete. The build script will:
 
 - collect Git-tracked original source files deterministically;
@@ -74,11 +76,11 @@ Read both:
 
 Also inspect `audit/source-manifest.json`, `audit/image-manifest.json`, and both generated PDFs page by page.
 
-Fix every error. Resolve or disclose each warning. Re-run the build after changes; do not patch generated TeX as the primary fix because regeneration will overwrite it.
+Fix every error. Resolve or disclose each warning. Re-run the build into a fresh output directory after changes. Do not patch generated TeX as the primary fix because those edits do not carry over into a rebuild.
 
 ### 6. Deliver
 
-Deliver the contents of `submission/` and retain `audit/` for internal review. Clearly state:
+Deliver only the reviewed files from `submission/` that the recipient needs. Keep `audit/` local for internal review: it contains the full merged source selection, a copy of the input configuration, and build logs. Never submit, commit, or share the entire output directory. Clearly state:
 
 - software full name and version;
 - program and documentation page counts;
