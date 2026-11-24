@@ -25,7 +25,8 @@ jobs:
       - name: Install PDF toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends texlive-xetex texlive-lang-chinese texlive-latex-extra poppler-utils
+          sudo apt-get install -y --no-install-recommends texlive-xetex texlive-lang-chinese texlive-latex-extra texlive-fonts-recommended poppler-utils
+          # hyperref uses the Zapf Dingbats metric in texlive-fonts-recommended.
           xelatex --version
           pdfinfo -v
           pdftotext -v
