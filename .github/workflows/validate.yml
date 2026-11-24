@@ -27,11 +27,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends texlive-xetex texlive-lang-chinese texlive-latex-extra poppler-utils
           xelatex --version
-          kpsewhich xelatex.fmt
-          kpsewhich ctexart.cls
-          kpsewhich FandolSong-Regular.otf
-          kpsewhich enumitem.sty
-          kpsewhich lastpage.sty
           pdfinfo -v
           pdftotext -v
 
